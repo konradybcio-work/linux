@@ -361,21 +361,23 @@ static int aio_ring_mremap(struct vm_area_struct *vma)
 	spin_lock(&mm->ioctx_lock);
 	rcu_read_lock();
 	table = rcu_dereference(mm->ioctx_table);
-	if (table) {
-		for (i = 0; i < table->nr; i++) {
-			struct kioctx *ctx;
+	if (!table)
+		goto out_unlock;
 
-			ctx = rcu_dereference(table->table[i]);
-			if (ctx && ctx->aio_ring_file == file) {
-				if (!atomic_read(&ctx->dead)) {
-					ctx->user_id = ctx->mmap_base = vma->vm_start;
-					res = 0;
-				}
-				break;
+	for (i = 0; i < table->nr; i++) {
+		struct kioctx *ctx;
+
+		ctx = rcu_dereference(table->table[i]);
+		if (ctx && ctx->aio_ring_file == file) {
+			if (!atomic_read(&ctx->dead)) {
+				ctx->user_id = ctx->mmap_base = vma->vm_start;
+				res = 0;
 			}
+			break;
 		}
 	}
 
+out_unlock:
 	rcu_read_unlock();
 	spin_unlock(&mm->ioctx_lock);
 	return res;
@@ -392,7 +394,7 @@ static const struct vm_operations_struct aio_ring_vm_ops = {
 
 static int aio_ring_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	vma->vm_flags |= VM_DONTEXPAND;
+	vm_flags_set(vma, VM_DONTEXPAND);
 	vma->vm_ops = &aio_ring_vm_ops;
 	return 0;
 }
